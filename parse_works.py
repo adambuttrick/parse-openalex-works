@@ -1,56 +1,74 @@
+import argparse
 import re
 import ast
-import sys
-import csv
-import glob
 import gzip
-import json
+import csv
 
-def get_works_data(f):
+
+def parse_arguments():
+	parser = argparse.ArgumentParser(
+		description="Process input file containing paths to gzipped JSON files.")
+	parser.add_argument('-i', '--input', required=True,
+						help="Path to the input file containing list of gzipped JSON files.")
+	return parser.parse_args()
+
+
+def log_error(file_name, line_num, line_content, error_message):
+	with open('parsing_errors.csv', 'a') as f_out:
+		writer = csv.writer(f_out)
+		writer.writerow(
+			[file_name, line_num, repr(line_content), error_message])
+
+
+def write_to_csv(data, outfile):
+	with open(outfile, 'a') as f_out:
+		writer = csv.writer(f_out)
+		writer.writerow(data)
+
+
+def process_work_data(work, file_name, line_num, error_log):
+	doi = work.get('ids', {}).get('doi', '')
+	openalex_work_id = work.get('ids', {}).get('openalex', '')
+	if 'authorships' in work:
+		for author in work['authorships']:
+			raw_affiliation = author.get('raw_affiliation_string', '')
+			for institution in author.get('institutions', []):
+				if 'ror' in institution:
+					ror_id = institution['ror']
+					outfile = f'csvs/{ror_id.replace("https://ror.org/", "")}.csv'
+					csv_data = [doi, openalex_work_id, raw_affiliation,
+								institution.get('id', ''), ror_id]
+				elif 'id' in institution:
+					institution_id = institution['id']
+					outfile = f'csvs/{institution_id.replace("https://openalex.org/", "")}.csv'
+					csv_data = [doi, openalex_work_id,
+								raw_affiliation, institution_id]
+				else:
+					continue
+				write_to_csv(csv_data, outfile)
+
+
+def process_json_line(json_line, line_num, file_name, error_log):
+	subs = {'null': 'None', 'true': 'True', 'false': 'False'}
+	for k, v in subs.items():
+		json_line = re.sub(k, v, json_line)
+	work = ast.literal_eval(json_line) if json_line else None
+	if work:
+		process_work_data(work, file_name, line_num, error_log)
+
+
+def process_file(input_file):
 	error_log = 'parsing_errors.csv'
-	with open(f) as f_in:
+	with open(input_file) as f_in:
 		all_files = [line.strip() for line in f_in]
-	len_all_files = str(len(all_files))
+	len_all_files = len(all_files)
 	for i, file in enumerate(all_files):
-		print('Parsing', str(i), 'of', len_all_files, '-', file)
-		with gzip.open(file, 'r+') as f_in:       
-			for i, line in enumerate(f_in):
-				try:                   
-					str_data = line.decode('utf-8')
-					subs = {'null':'None', 'true':'True', 'false':'False'}
-					for k,v in subs.items(): str_data = re.sub(k,v, str_data)
-					work = ast.literal_eval(str_data) if str_data != '' else None
-					if work is not None:
-						if 'ids' in work.keys() and 'ids' != [] and 'ids' != None:
-							work_ids = work['ids']
-							doi = work_ids['doi'] if 'doi' in work_ids.keys() else ''
-							openalex_work_id = work_ids['openalex'] if 'openalex' in work_ids.keys() else ''
-							if 'authorships' in work.keys() and work['authorships'] != []:
-								authorships = work['authorships']
-								for author in authorships:
-									if 'raw_affiliation_string' in author.keys() and author['raw_affiliation_string'] != None:
-										if 'institutions' in author.keys() and author['institutions'] != [] and author['institutions'] != None:
-											for institution in author['institutions']:
-												raw_affiliation = author['raw_affiliation_string']
-												if 'ror' in institution.keys() and institution['ror'] != None:
-													institution_id = institution['id']
-													ror_id = institution['ror']
-													outfile = 'csvs/' + re.sub('https://ror.org/', '', ror_id) + '.csv'
-													with open(outfile, 'a') as f_out:
-														writer = csv.writer(f_out)
-														writer.writerow([doi, openalex_work_id, raw_affiliation, institution_id, ror_id])
-												elif 'id' in institution.keys() and institution['id'] != None:
-													institution_id = institution['id']
-													outfile = 'csvs/' + re.sub('https://openalex.org/', '', institution_id) + '.csv'
-													with open(outfile, 'a') as f_out:
-														writer = csv.writer(f_out)
-														writer.writerow([doi, openalex_work_id, raw_affiliation, institution_id])
-				except Exception as e:
-					with open(error_log, 'a') as f_out:
-						writer = csv.writer(f_out)
-						writer.writerow([file, i, line, str(e)])
-
+		print(f'Parsing {i+1} of {len_all_files} - {file}')
+		with gzip.open(file, 'rt', encoding='utf-8') as f_in:
+			for line_num, line in enumerate(f_in):
+				process_json_line(line, line_num, file, error_log)
 
 
 if __name__ == '__main__':
-	get_works_data(sys.argv[1])
+	args = parse_arguments()
+	process_file(args.input)
