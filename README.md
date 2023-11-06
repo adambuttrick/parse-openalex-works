@@ -20,7 +20,7 @@ python process_json_to_csv.py -i <path_to_input_file>
 
 - **-i, --input**: Path to the input file containing the list of gzipped JSON files. (Required)
 
-The script will automatically read each line of the input file as a path to a gzipped JSON file, parse the contents, and output CSV files in a directory named `csvs`. Each CSV file will be named after the corresponding OpenAlex institution ID, and will contain the extracted data fields.
+The script will automatically read each line of the input file as a path to a gzipped JSON file, parse the contents, and output CSV files in a directory named `csvs`. Each CSV file will be named after the corresponding ROR ID or OpenAlex institution ID, and will contain the data fields listed above.
 
 ### Error Logging
 
