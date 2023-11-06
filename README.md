@@ -1,5 +1,3 @@
-# GZipped JSON to CSV Processor (README)
-
 ## Overview
 
 Processes a list of gzipped OpenAlex works data files and extracts the work and affiliation metadata.
